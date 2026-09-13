@@ -196,34 +196,49 @@ async function main() {
     items.push({ discussion, position: first.position, context });
   }
 
-  const agentFilePath = path.join(outDir, 'review-comments-for-agent.md');
-  const skippedFilePath = path.join(outDir, 'skipped-comments.md');
-  const summaryFilePath = path.join(outDir, 'review-summary.md'); // where the AGENT writes its output
+  // Resolve to an absolute path: this script may be run from anywhere, but
+  // the coding agent will be working inside your project directory, so it
+  // needs an unambiguous, non-relative path to know where to write its
+  // summary file back to.
+  const absOutDir = path.resolve(outDir);
+  const agentFilePath = path.join(absOutDir, 'review-comments-for-agent.md');
+  const skippedFilePath = path.join(absOutDir, 'skipped-comments.md');
+  const summaryFilePath = path.join(absOutDir, 'review-summary.md'); // where the AGENT writes its output
 
   fs.writeFileSync(
     agentFilePath,
-    buildAgentMarkdown({ mr, mrUrl, project, items, contextLines, summaryFilePath }),
+    buildAgentMarkdown({ mr, mrUrl, project, items, contextLines, absOutDir, summaryFilePath }),
     'utf8'
   );
   fs.writeFileSync(skippedFilePath, buildSkippedMarkdown({ mr, skipped }), 'utf8');
 
   console.log(`\nDone.`);
-  console.log(`  -> ${agentFilePath}   (paste this into Cursor / your coding agent)`);
-  console.log(`  -> ${skippedFilePath}      (comments left out and why — review manually if needed)`);
-  console.log(`\nAfter the agent finishes, it should have written:`);
-  console.log(`  -> ${summaryFilePath}      (read this with post-review-summary.js)`);
+  console.log(`  -> ${agentFilePath}\n     (paste this into Cursor / your coding agent)`);
+  console.log(`  -> ${skippedFilePath}\n     (comments left out and why — review manually if needed)`);
+  console.log(`\nAfter the agent finishes, it should have written (overwriting any previous run):`);
+  console.log(`  -> ${summaryFilePath}\n     (read this next with post-review-summary.js)`);
 }
 
 // ---------------------------------------------------------------------------
 // Output formatting
 // ---------------------------------------------------------------------------
 
-function buildAgentMarkdown({ mr, mrUrl, project, items, contextLines, summaryFilePath }) {
+function buildAgentMarkdown({ mr, mrUrl, project, items, contextLines, absOutDir, summaryFilePath }) {
   const header = `# Code Review Comments — ${project.path_with_namespace} !${mr.iid}
 
 Source MR: ${mrUrl}
 Title: ${mr.title}
 Branch: \`${mr.source_branch}\` -> \`${mr.target_branch}\`
+
+**This file was generated in:** \`${absOutDir}\`
+**Write your summary report to (absolute path):** \`${summaryFilePath}\`
+
+This directory is very likely outside your current project/repo root (the
+script that generated this file was run separately from wherever you're
+working now) — use the absolute path above exactly as given, not a path
+relative to the project. If a \`review-summary.md\` already exists there from
+a previous run, **overwrite it completely** rather than appending, so it
+always reflects only the latest pass.
 
 ## Instructions for the coding agent
 
@@ -260,7 +275,8 @@ targeted fix. Specifically:
 
 ### Required output: the summary report
 
-When you've gone through every comment below, write a file at:
+When you've gone through every comment below, write (overwriting if it
+already exists) a file at this exact absolute path:
 
 \`${summaryFilePath}\`
 
